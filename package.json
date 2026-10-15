@@ -21,7 +21,7 @@
 		"type": "git",
 		"url": "git+https://github.com/setposgg/cs2-crosshair.git"
 	},
-	"homepage": "https://github.com/setposgg/cs2-crosshair#readme",
+	"homepage": "https://setpos.gg",
 	"bugs": "https://github.com/setposgg/cs2-crosshair/issues",
 	"exports": {
 		".": {
