@@ -63,6 +63,37 @@ export type ReticleRenderOptions = {
 	/** Replace the original pixel alphabet, or return [] to hide labels. */
 	labels?: (glyphs: readonly ReticleGlyph[]) => ReticleRect[];
 };
+
+/** Caller-owned image; no texture is bundled. Cells use the geometry's column/row indices. */
+export type ReticleAtlas = {
+	href: string;
+	width: number;
+	height: number;
+	cellWidth: number;
+	cellHeight: number;
+	/** Optional SVG filter URL, for example a caller-defined colour tint. */
+	filter?: string;
+};
+const attribute = (value: string) =>
+	value.replace(
+		/[&<>"']/g,
+		(character) =>
+			({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[character]!
+	);
+
+/** SVG children for caller-supplied glyphs, including resized/filtered label boxes. */
+export function reticleAtlasToSvgContent(
+	glyphs: readonly ReticleGlyph[],
+	atlas: ReticleAtlas
+): string {
+	return glyphs
+		.map(
+			(glyph) =>
+				`<svg x="${n(glyph.x)}" y="${n(glyph.y)}" width="${n(glyph.width)}" height="${n(glyph.height)}" viewBox="${n(glyph.column * atlas.cellWidth)} ${n(glyph.row * atlas.cellHeight)} ${n(atlas.cellWidth)} ${n(atlas.cellHeight)}" preserveAspectRatio="none"><image href="${attribute(atlas.href)}" width="${n(atlas.width)}" height="${n(atlas.height)}"${atlas.filter ? ` filter="${attribute(atlas.filter)}"` : ''}/></svg>`
+		)
+		.join('');
+}
+export type ReticleSvgOptions = ReticleRenderOptions & { atlas?: ReticleAtlas };
 export function reticleLayers(
 	drawing: GrenadeReticle,
 	options: ReticleRenderOptions = {}
@@ -112,8 +143,13 @@ export const crosshairToSvg = (drawing: CrosshairDrawing, frame: Frame) =>
 export const reticleToSvg = (
 	drawing: GrenadeReticle,
 	frame: Frame,
-	options?: ReticleRenderOptions
-) => layersToSvg(reticleLayers(drawing, options), frame);
+	options: ReticleSvgOptions = {}
+) => {
+	if (!options.atlas) return layersToSvg(reticleLayers(drawing, options), frame);
+	const color = options.color ?? [0, 255, 0, 255];
+	const content = layersToSvgContent(reticleLayers(drawing, { ...options, labels: () => [] }));
+	return `<svg xmlns="http://www.w3.org/2000/svg" width="${n(frame.width)}" height="${n(frame.height)}" viewBox="0 0 ${n(frame.width)} ${n(frame.height)}">${content}<g opacity="${opacity(color)}">${reticleAtlasToSvgContent(drawing.glyphs, options.atlas)}</g></svg>`;
+};
 
 /** Only the standard path/fill API is needed; browser, OffscreenCanvas and server canvases work. */
 export type CanvasContext = Pick<

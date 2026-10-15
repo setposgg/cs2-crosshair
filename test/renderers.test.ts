@@ -12,11 +12,45 @@ import {
 	crosshairToCanvas,
 	crosshairToSvg,
 	reticleLayers,
+	reticleAtlasToSvgContent,
 	reticleToSvg
 } from '../dist/renderers.js';
 import type { CanvasContext } from '../dist/renderers.js';
 
 const frame = { width: 1920, height: 1080 };
+test('caller-owned atlas replaces default lettering with exact cell crops', () => {
+	const drawing = grenadeReticle(frame);
+	const atlas = {
+		href: '/glyphs.png?x=1&y="2"',
+		width: 256,
+		height: 256,
+		cellWidth: 64,
+		cellHeight: 50,
+		filter: 'url(#tint)'
+	};
+	const glyph = { ...drawing.glyphs[0], x: 10.5, y: 20, width: 30, height: 15, column: 2, row: 3 };
+	const content = reticleAtlasToSvgContent([glyph], atlas);
+	assert.match(
+		content,
+		/x="10.5" y="20" width="30" height="15" viewBox="128 150 64 50" preserveAspectRatio="none"/
+	);
+	assert.match(
+		content,
+		/href="\/glyphs.png\?x=1&amp;y=&quot;2&quot;" width="256" height="256" filter="url\(#tint\)"/
+	);
+	assert.equal(reticleAtlasToSvgContent([], atlas), '');
+	const svg = reticleToSvg(drawing, frame, {
+		atlas,
+		color: [1, 2, 3, 128],
+		labels: () => {
+			throw new Error('Atlas must replace lettering');
+		}
+	});
+	assert.equal((svg.match(/<image /g) ?? []).length, drawing.glyphs.length);
+	assert.equal((svg.match(/<rect /g) ?? []).length, drawing.rects.length);
+	assert.match(svg, /<g opacity="0.5019607843137255"><svg/);
+	assert.doesNotMatch(reticleToSvg(drawing, frame), /<image/);
+});
 test('bounds include full and half outlines, and empty drawings have no bounds', () => {
 	const cross = (outline: 0 | 1 | 2) =>
 		crosshairDrawing({ ...DEFAULT_CROSSHAIR, style: 4, outline }, frame);
@@ -62,6 +96,11 @@ test('uses the same round outline geometry for SVG and Canvas', () => {
 		end: -Math.PI / 8
 	});
 	assert.equal(outline.shapes[0].x, 959.5);
+	assert.equal(outline.shapes[0].kind, 'arc');
+	const outlinedArc = outline.shapes[0];
+	if (outlinedArc.kind !== 'arc') throw new Error('Expected outlined arc');
+	// The old Setpos renderer extends each end by half the outline reach along the circle.
+	assert.ok(Math.abs(outlinedArc.start - (-Math.PI / 4 - Math.PI / 8 - 1 / 12)) < 1e-12);
 	assert.match(crosshairToSvg(drawing, frame), /stroke-width="3"/);
 });
 

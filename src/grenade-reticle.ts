@@ -20,7 +20,7 @@ export type GrenadeReticle = { rects: ReticleRect[]; glyphs: ReticleGlyph[] };
 
 /** The atlas (materials/dev/grenade_crosshair_numerals) is 256 px square; the shader reads cells of
  * 64 by 50 px: four columns (-x, x, -y, y) and five rows, 5 at the top down to 1. */
-const GLYPH_ATLAS = { size: 256, cellWidth: 64, cellHeight: 50, columns: 4, rows: 5 };
+export const GLYPH_ATLAS = { size: 256, cellWidth: 64, cellHeight: 50, columns: 4, rows: 5 };
 /** `cl_crosshaircolor_r/g/b/a` defaults: the reticle takes the player's crosshair colour. */
 export const RETICLE_COLOR = '#00ff00';
 /** `cl_grenadecrosshair_tickscaling`, a development-only variable: every player has the default. */

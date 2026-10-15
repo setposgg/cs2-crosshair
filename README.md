@@ -87,6 +87,8 @@ to a renderer to hide it, or supply a function from label boxes to your own rect
 also render the returned text and boxes yourself. `reticleLayers` exposes the renderer's layers.
 The caller handles pin-pull delay, fade-in, and whether to keep the regular crosshair visible.
 
+Supply your own image with `reticleToSvg(reticle, frame, { atlas: { href, width, height, cellWidth, cellHeight } })`, or use `reticleAtlasToSvgContent(glyphs, atlas)` inside your SVG (an optional `filter` tints the image).
+
 ## Development
 
 ```sh
