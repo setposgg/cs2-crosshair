@@ -1,0 +1,43 @@
+{
+	"name": "@setposgg/cs2-crosshair",
+	"version": "0.1.0",
+	"description": "CS2 crosshair share codes, pixel geometry and grenade line-up reticle",
+	"type": "module",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/setposgg/cs2-crosshair.git"
+	},
+	"homepage": "https://github.com/setposgg/cs2-crosshair#readme",
+	"bugs": "https://github.com/setposgg/cs2-crosshair/issues",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		},
+		"./renderers": {
+			"types": "./dist/renderers.d.ts",
+			"import": "./dist/renderers.js"
+		}
+	},
+	"types": "./dist/index.d.ts",
+	"files": [
+		"dist",
+		"docs",
+		"README.md",
+		"LICENSE"
+	],
+	"sideEffects": false,
+	"engines": {
+		"node": ">=22.18.0"
+	},
+	"scripts": {
+		"build": "tsc -p tsconfig.json",
+		"test": "npm run build && node --test test/*.test.ts",
+		"examples": "npm run build && node scripts/render-examples.mjs",
+		"prepack": "npm run build"
+	},
+	"devDependencies": {
+		"typescript": "6.0.3"
+	}
+}

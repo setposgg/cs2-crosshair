@@ -1,0 +1,172 @@
+import type { CrosshairDrawing, Rgba } from './crosshair.js';
+import type { GrenadeReticle, ReticleGlyph, ReticleRect } from './grenade-reticle.js';
+import { reticleLabelRects } from './reticle-labels.js';
+
+export type Frame = { width: number; height: number };
+export type RenderShape =
+	| ({ kind: 'rect' } & ReticleRect)
+	| {
+			kind: 'arc';
+			x: number;
+			y: number;
+			radius: number;
+			width: number;
+			start: number;
+			end: number;
+	  };
+export type RenderLayer = { color: Rgba; shapes: RenderShape[] };
+
+/** Outline first, then fill. Each layer is a union: translucent overlaps never get darker. */
+export function crosshairLayers(drawing: CrosshairDrawing): RenderLayer[] {
+	const [before, after] = drawing.outline;
+	const layer = (color: Rgba, extra: number, shift: number): RenderLayer => ({
+		color,
+		shapes: drawing.shapes.flatMap((shape): RenderShape[] => {
+			if (shape.kind === 'rect')
+				return [
+					{
+						kind: 'rect',
+						x: shape.x - (extra ? before : 0),
+						y: shape.y - (extra ? before : 0),
+						width: shape.width + extra,
+						height: shape.height + extra
+					}
+				];
+			const radius = shape.outer - shape.width / 2;
+			if (radius <= 0 || (shape.kind === 'arcs' && shape.degrees <= 0)) return [];
+			const common = {
+				kind: 'arc' as const,
+				x: shape.x + shift,
+				y: shape.y + shift,
+				radius,
+				width: shape.width + extra
+			};
+			if (shape.kind === 'ring') return [{ ...common, start: 0, end: Math.PI * 2 }];
+			const half = Math.min(Math.PI / 4, (shape.degrees * Math.PI) / 360 + extra / 2 / radius);
+			return [45, 135, 225, 315].map((degrees) => {
+				const middle = ((degrees - 90) * Math.PI) / 180;
+				return { ...common, start: middle - half, end: middle + half };
+			});
+		})
+	});
+	const reach = before + after;
+	return [
+		...(reach > 0 && drawing.outlineColor[3] > 0
+			? [layer(drawing.outlineColor, reach, after === 0 ? -0.5 : 0)]
+			: []),
+		layer(drawing.color, 0, 0)
+	];
+}
+
+export type ReticleRenderOptions = {
+	color?: Rgba;
+	/** Replace the original pixel alphabet, or return [] to hide labels. */
+	labels?: (glyphs: readonly ReticleGlyph[]) => ReticleRect[];
+};
+export function reticleLayers(
+	drawing: GrenadeReticle,
+	options: ReticleRenderOptions = {}
+): RenderLayer[] {
+	return [
+		{
+			color: options.color ?? [0, 255, 0, 255],
+			shapes: [...drawing.rects, ...(options.labels ?? reticleLabelRects)(drawing.glyphs)].map(
+				(rect) => ({ ...rect, kind: 'rect' })
+			)
+		}
+	];
+}
+
+// All SVG values are numbers from the drawing, never caller-supplied markup.
+const n = (value: number) => (Number.isFinite(value) ? value : 0);
+const rgb = (color: Rgba) => `rgb(${n(color[0])} ${n(color[1])} ${n(color[2])})`;
+const opacity = (color: Rgba) => Math.max(0, Math.min(1, n(color[3]) / 255));
+
+/** SVG children, for an existing SVG whose viewBox uses the drawing's frame pixels. */
+export function layersToSvgContent(layers: readonly RenderLayer[]): string {
+	return layers
+		.map(
+			({ color, shapes }) =>
+				`<g fill="${rgb(color)}" stroke="${rgb(color)}" opacity="${opacity(color)}">${shapes
+					.map((shape) => {
+						if (shape.kind === 'rect')
+							return `<rect stroke="none" x="${n(shape.x)}" y="${n(shape.y)}" width="${n(shape.width)}" height="${n(shape.height)}" style="shape-rendering:var(--crosshair-edges,crispEdges)"/>`;
+						if (shape.end - shape.start >= Math.PI * 2)
+							return `<circle fill="none" cx="${n(shape.x)}" cy="${n(shape.y)}" r="${n(shape.radius)}" stroke-width="${n(shape.width)}"/>`;
+						const at = (angle: number) =>
+							`${n(shape.x + shape.radius * Math.cos(angle))} ${n(shape.y + shape.radius * Math.sin(angle))}`;
+						return `<path fill="none" d="M${at(shape.start)}A${n(shape.radius)} ${n(shape.radius)} 0 0 1 ${at(shape.end)}" stroke-width="${n(shape.width)}"/>`;
+					})
+					.join('')}</g>`
+		)
+		.join('');
+}
+
+export function layersToSvg(layers: readonly RenderLayer[], frame: Frame): string {
+	return `<svg xmlns="http://www.w3.org/2000/svg" width="${n(frame.width)}" height="${n(frame.height)}" viewBox="0 0 ${n(frame.width)} ${n(frame.height)}">${layersToSvgContent(layers)}</svg>`;
+}
+export const crosshairToSvgContent = (drawing: CrosshairDrawing) =>
+	layersToSvgContent(crosshairLayers(drawing));
+export const crosshairToSvg = (drawing: CrosshairDrawing, frame: Frame) =>
+	layersToSvg(crosshairLayers(drawing), frame);
+export const reticleToSvg = (
+	drawing: GrenadeReticle,
+	frame: Frame,
+	options?: ReticleRenderOptions
+) => layersToSvg(reticleLayers(drawing, options), frame);
+
+/** Only the standard path/fill API is needed; browser, OffscreenCanvas and server canvases work. */
+export type CanvasContext = Pick<
+	CanvasRenderingContext2D,
+	| 'save'
+	| 'restore'
+	| 'beginPath'
+	| 'rect'
+	| 'moveTo'
+	| 'lineTo'
+	| 'arc'
+	| 'closePath'
+	| 'fill'
+	| 'fillStyle'
+	| 'globalAlpha'
+>;
+
+/** Draw in the caller's current transform, preserving its state and multiplying its opacity.
+ * Uses one nonzero path per layer, so overlapping bars retain the layer's opacity. */
+export function layersToCanvas(context: CanvasContext, layers: readonly RenderLayer[]): void {
+	for (const { color, shapes } of layers) {
+		context.save();
+		try {
+			context.fillStyle = rgb(color);
+			context.globalAlpha *= opacity(color);
+			context.beginPath();
+			for (const shape of shapes) {
+				if (shape.kind === 'rect') {
+					context.rect(shape.x, shape.y, shape.width, shape.height);
+					continue;
+				}
+				// A round stroke expanded into a filled annulus or annular sector, with butt ends.
+				const outer = shape.radius + shape.width / 2;
+				const inner = Math.max(0, shape.radius - shape.width / 2);
+				const point = (radius: number, angle: number) =>
+					[shape.x + radius * Math.cos(angle), shape.y + radius * Math.sin(angle)] as const;
+				context.moveTo(...point(outer, shape.start));
+				context.arc(shape.x, shape.y, outer, shape.start, shape.end);
+				context.lineTo(...point(inner, shape.end));
+				if (inner > 0) context.arc(shape.x, shape.y, inner, shape.end, shape.start, true);
+				else context.lineTo(shape.x, shape.y);
+				context.closePath();
+			}
+			context.fill();
+		} finally {
+			context.restore();
+		}
+	}
+}
+export const crosshairToCanvas = (context: CanvasContext, drawing: CrosshairDrawing) =>
+	layersToCanvas(context, crosshairLayers(drawing));
+export const reticleToCanvas = (
+	context: CanvasContext,
+	drawing: GrenadeReticle,
+	options?: ReticleRenderOptions
+) => layersToCanvas(context, reticleLayers(drawing, options));
