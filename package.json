@@ -2,8 +2,21 @@
 	"name": "@setposgg/cs2-crosshair",
 	"version": "0.1.0",
 	"description": "CS2 crosshair share codes, pixel geometry and grenade line-up reticle",
+	"keywords": [
+		"cs2",
+		"counter-strike-2",
+		"counter-strike",
+		"csgo",
+		"crosshair",
+		"share-code",
+		"crosshair-code",
+		"grenade",
+		"svg",
+		"canvas"
+	],
 	"type": "module",
 	"license": "MIT",
+	"author": "setpos.gg <hey@lorem.sh> (https://setpos.gg)",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/setposgg/cs2-crosshair.git"
@@ -29,7 +42,7 @@
 	],
 	"sideEffects": false,
 	"engines": {
-		"node": ">=22.18.0"
+		"node": ">=20"
 	},
 	"scripts": {
 		"build": "tsc -p tsconfig.json",
