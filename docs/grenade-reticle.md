@@ -31,9 +31,20 @@ unless named:
   horizontal tick: centred on it, two pixels below its end. Beside a vertical tick: two pixels
   right of its end, centred on it. Left and up are negative (`-1x`, `-1y`). The game samples one 64 by
   50 px cell of its numeral texture, averaged over 3×3 taps per pixel. This package keeps the
-  same boxes and cell indices but replaces that Valve asset with original 3×5 pixel lettering
-  (`reticleLabelRects`). Letter shapes therefore differ. No texture or font ships. Callers can
-  supply their own lettering or omit labels.
+  same boxes and cell indices. Default labels use Liberation Sans Regular outlines at 40 horizontal / 42 vertical source
+  pixels/em in a 64×50 cell (2048 font units/em), baseline 37 for rows 0 and 4 and 36 otherwise.
+  Source x origins are 4 for negative labels, 11 for positive x and 13 for positive y. These
+  offsets follow measured ink placement; the original PSD's font metadata is not present in
+  the compiled game texture. The atlas has 29px numeral caps, 21px x-height and an 8px y descender.
+  The texture is Arial (Regular) at 40 px: rendered Arial matches its cells best (soft IoU 0.89
+  with 0.25 px of extra weight, the game's rasteriser being a little heavier than FreeType), ahead
+  of Arial Bold (0.76). Arial can't ship, so Liberation Sans Regular (metrically compatible) stands
+  in, thickened by a one-source-pixel stroke, its best fit (0.78; Liberation Sans Bold 0.71). The
+  package's labels in place score 0.74 against the game's cells.
+  Native SVG/Canvas antialiasing replaces the game's raster texture and 3×3 sampling, so edges
+  are an approximation. No Valve texture or proprietary font ships. Caller-supplied atlas
+  cropping/filtering is unchanged. `reticleLabelPaths` exposes vectors; `reticleLabelRects`
+  provides a whole-pixel monochrome fallback. Callers can supply their own lettering or hide it.
 - **Colour.** The player's crosshair colour, `cl_crosshaircolor_r/g/b/a`; the defaults are pure
   green, opaque. Renderers accept a colour and opacity.
 

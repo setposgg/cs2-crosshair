@@ -62,7 +62,9 @@ numbered `CROSSHAIR_STYLES` names are exported from the main entry point.
 
 ## Grenade reticle
 
-![Grenade reticle with original pixel lettering](docs/images/grenade-reticle.svg)
+![Grenade reticle with open-font lettering](docs/images/grenade-reticle.svg)
+
+![Grenade label detail at twice the 1080p size](docs/images/grenade-reticle-detail.svg)
 
 ```ts
 import { grenadeReticle } from '@setposgg/cs2-crosshair';
@@ -80,11 +82,16 @@ same directions at other FOVs and aspect ratios. `reticleFocal(height, fov)` exp
 length. `grenadeReticle` returns `rects` and `glyphs` (text, label box and original atlas-cell
 indices). `{ labels: false }` omits the label boxes.
 
-**The label lettering is our own drawing, not Valve's.** Valve's numeral texture is not
-included. Tick geometry and label positions match the game; letter shapes differ. The default
-`reticleLabelRects(glyphs)` uses a small hand-drawn pixel alphabet. Pass `{ labels: () => [] }`
-to a renderer to hide it, or supply a function from label boxes to your own rectangles. You can
-also render the returned text and boxes yourself. `reticleLayers` exposes the renderer's layers.
+The game draws these labels from a texture of Arial at 40 px. Default labels here use embedded
+outlines from Liberation Sans Regular 2.1.5, a metrically compatible Arial substitute, slightly
+thickened to match, under the [SIL Open Font License](THIRD_PARTY_NOTICES.md). Only the characters
+`-0123456789xy` are included; no installed font is needed. The game's numeral texture stays
+outside the package. Cell size, label boxes and placement match the game; native SVG/Canvas
+antialiasing approximates its texture filtering. Letter shapes and edge pixels differ.
+
+`reticleLabelPaths(glyphs)` exposes the outlines in frame coordinates. `reticleLabelRects(glyphs)`
+is a monochrome fallback for rectangle-only clients. Pass `{ labels: () => [] }` to hide labels,
+or supply your own rectangle callback. `reticleLayers` exposes the shared renderer layers.
 The caller handles pin-pull delay, fade-in, and whether to keep the regular crosshair visible.
 
 Supply your own image with `reticleToSvg(reticle, frame, { atlas: { href, width, height, cellWidth, cellHeight } })`, or use `reticleAtlasToSvgContent(glyphs, atlas)` inside your SVG (an optional `filter` tints the image).
@@ -95,7 +102,7 @@ Supply your own image with `reticleToSvg(reticle, frame, { atlas: { href, width,
 npm ci
 npm test          # builds, then node --test against the compiled public entry points
 npm run build    # tsc: dist/*.js and dist/*.d.ts
-npm run examples # regenerate both pictures above, using this package's renderer
+npm run examples # regenerate the pictures above, using this package's renderer
 npm pack --dry-run
 ```
 
@@ -103,6 +110,8 @@ The ported tests pin the existing share codes and pixel coordinates. See the
 [crosshair notes](docs/crosshair.md) and [reticle notes](docs/grenade-reticle.md) for the byte
 layout, rounding, projection and game-update checks.
 
-MIT. Built for [setpos.gg](https://setpos.gg). Links back are welcome.
+Code: MIT. Embedded glyph outlines: SIL OFL 1.1; see [third-party notices](THIRD_PARTY_NOTICES.md).
+
+Built for [setpos.gg](https://setpos.gg). Links back are welcome.
 
 Counter-Strike 2 is a trademark of Valve Corporation. Not affiliated with Valve.

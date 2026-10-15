@@ -1,6 +1,6 @@
 {
 	"name": "@setposgg/cs2-crosshair",
-	"version": "0.1.0",
+	"version": "0.2.0",
 	"description": "CS2 crosshair share codes, pixel geometry and grenade line-up reticle",
 	"keywords": [
 		"cs2",
@@ -26,11 +26,13 @@
 	"exports": {
 		".": {
 			"types": "./dist/index.d.ts",
-			"import": "./dist/index.js"
+			"import": "./dist/index.js",
+			"default": "./dist/index.js"
 		},
 		"./renderers": {
 			"types": "./dist/renderers.d.ts",
-			"import": "./dist/renderers.js"
+			"import": "./dist/renderers.js",
+			"default": "./dist/renderers.js"
 		}
 	},
 	"types": "./dist/index.d.ts",
@@ -38,7 +40,9 @@
 		"dist",
 		"docs",
 		"README.md",
-		"LICENSE"
+		"LICENSE",
+		"THIRD_PARTY_NOTICES.md",
+		"CHANGELOG.md"
 	],
 	"sideEffects": false,
 	"engines": {

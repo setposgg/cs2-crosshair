@@ -1,10 +1,11 @@
 import type { CrosshairDrawing, Rgba } from './crosshair.js';
 import type { GrenadeReticle, ReticleGlyph, ReticleRect } from './grenade-reticle.js';
-import { reticleLabelRects } from './reticle-labels.js';
+import { reticleLabelPaths, type ReticleLabelPath } from './reticle-labels.js';
 
 export type Frame = { width: number; height: number };
 export type RenderShape =
 	| ({ kind: 'rect' } & ReticleRect)
+	| ({ kind: 'path' } & ReticleLabelPath)
 	| {
 			kind: 'arc';
 			x: number;
@@ -60,7 +61,7 @@ export function crosshairLayers(drawing: CrosshairDrawing): RenderLayer[] {
 
 export type ReticleRenderOptions = {
 	color?: Rgba;
-	/** Replace the original pixel alphabet, or return [] to hide labels. */
+	/** Replace the default font outlines, or return [] to hide labels. */
 	labels?: (glyphs: readonly ReticleGlyph[]) => ReticleRect[];
 };
 
@@ -101,9 +102,10 @@ export function reticleLayers(
 	return [
 		{
 			color: options.color ?? [0, 255, 0, 255],
-			shapes: [...drawing.rects, ...(options.labels ?? reticleLabelRects)(drawing.glyphs)].map(
-				(rect) => ({ ...rect, kind: 'rect' })
-			)
+			shapes: [
+				...[...drawing.rects, ...(options.labels?.(drawing.glyphs) ?? [])].map((rect) => ({ ...rect, kind: 'rect' as const })),
+				...(!options.labels ? reticleLabelPaths(drawing.glyphs).map((path) => ({ ...path, kind: 'path' as const })) : [])
+			]
 		}
 	];
 }
@@ -122,6 +124,8 @@ export function layersToSvgContent(layers: readonly RenderLayer[]): string {
 					.map((shape) => {
 						if (shape.kind === 'rect')
 							return `<rect stroke="none" x="${n(shape.x)}" y="${n(shape.y)}" width="${n(shape.width)}" height="${n(shape.height)}" style="shape-rendering:var(--crosshair-edges,crispEdges)"/>`;
+						if (shape.kind === 'path')
+							return `<path stroke-width="${n(shape.weight)}" stroke-linejoin="round" d="${shape.commands.map(([op, ...values]) => op + values.map(n).join(' ')).join('')}"/>`;
 						if (shape.end - shape.start >= Math.PI * 2)
 							return `<circle fill="none" cx="${n(shape.x)}" cy="${n(shape.y)}" r="${n(shape.radius)}" stroke-width="${n(shape.width)}"/>`;
 						const at = (angle: number) =>
@@ -160,11 +164,16 @@ export type CanvasContext = Pick<
 	| 'rect'
 	| 'moveTo'
 	| 'lineTo'
+	| 'quadraticCurveTo'
 	| 'arc'
 	| 'closePath'
 	| 'fill'
 	| 'fillStyle'
 	| 'globalAlpha'
+	| 'stroke'
+	| 'strokeStyle'
+	| 'lineWidth'
+	| 'lineJoin'
 >;
 
 /** Draw in the caller's current transform, preserving its state and multiplying its opacity.
@@ -181,6 +190,15 @@ export function layersToCanvas(context: CanvasContext, layers: readonly RenderLa
 					context.rect(shape.x, shape.y, shape.width, shape.height);
 					continue;
 				}
+				if (shape.kind === 'path') {
+					for (const c of shape.commands) {
+						if (c[0] === 'M') context.moveTo(c[1], c[2]);
+						else if (c[0] === 'L') context.lineTo(c[1], c[2]);
+						else if (c[0] === 'Q') context.quadraticCurveTo(c[1], c[2], c[3], c[4]);
+						else context.closePath();
+					}
+					continue;
+				}
 				// A round stroke expanded into a filled annulus or annular sector, with butt ends.
 				const outer = shape.radius + shape.width / 2;
 				const inner = Math.max(0, shape.radius - shape.width / 2);
@@ -194,6 +212,21 @@ export function layersToCanvas(context: CanvasContext, layers: readonly RenderLa
 				context.closePath();
 			}
 			context.fill();
+			// Label outlines carry a thin stroke in the same colour (their weight), as in SVG.
+			for (const shape of shapes) {
+				if (shape.kind !== 'path' || !(shape.weight > 0)) continue;
+				context.beginPath();
+				for (const c of shape.commands) {
+					if (c[0] === 'M') context.moveTo(c[1], c[2]);
+					else if (c[0] === 'L') context.lineTo(c[1], c[2]);
+					else if (c[0] === 'Q') context.quadraticCurveTo(c[1], c[2], c[3], c[4]);
+					else context.closePath();
+				}
+				context.strokeStyle = rgb(color);
+				context.lineWidth = shape.weight;
+				context.lineJoin = 'round';
+				context.stroke();
+			}
 		} finally {
 			context.restore();
 		}

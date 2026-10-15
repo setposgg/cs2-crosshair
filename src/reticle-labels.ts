@@ -1,35 +1,73 @@
 import type { ReticleGlyph, ReticleRect } from './grenade-reticle.js';
+import { RETICLE_OUTLINES, type OutlineCommand } from './reticle-outlines.js';
 
-// Original 3×5 pixel lettering, drawn here by hand. No font or Valve texture is used.
-const letters: Record<string, string[]> = {
-	'-': ['000', '000', '111', '000', '000'],
-	'1': ['010', '110', '010', '010', '111'],
-	'2': ['110', '001', '010', '100', '111'],
-	'3': ['110', '001', '010', '001', '110'],
-	'4': ['101', '101', '111', '001', '001'],
-	'5': ['111', '100', '110', '001', '110'],
-	x: ['000', '101', '010', '101', '000'],
-	y: ['000', '101', '011', '001', '110']
-};
+/** `weight` is the stroke width (frame pixels) drawn around the outline in the label's colour. */
+export type ReticleLabelPath = { commands: OutlineCommand[]; weight: number };
 
-/** Original pixel lettering inside the game's label boxes. Unlike the ticks, these shapes are
- * not a port of Valve's glyphs. Supply your own rectangles to replace them, or omit labels. */
+/** Open-font outlines in the game's 64×50 cells, projected into its unchanged label boxes.
+ * The game's texture is Arial at 40 px (best fit 0.89 soft IoU against its cells, Arial Regular with
+ * 0.25 px of extra weight). Arial can't ship, so Liberation Sans Regular stands in, thickened by a
+ * one-source-pixel stroke (0.5 px each side), its best fit (0.78; Liberation Sans Bold scores 0.71).
+ * Native SVG/Canvas antialiasing approximates the game's filtered texture; it is not its shader. */
+export function reticleLabelPaths(glyphs: readonly ReticleGlyph[]): ReticleLabelPath[] {
+	return glyphs.flatMap((glyph) => {
+		// Measured atlas ink: 29px numeral cap, 21px x-height, 8px y descender.
+		// Positive y labels sit two source pixels farther right than positive x labels.
+		let advance = glyph.text.startsWith('-') ? 4 : glyph.text.endsWith('y') ? 13 : 11;
+		const baseline = glyph.row === 0 || glyph.row === 4 ? 37 : 36;
+		const sx = glyph.width / 64;
+		const sy = glyph.height / 50;
+		const em = 40 / 2048;
+		// Liberation has a lower cap/em than Arial: 42 vertically restores the measured 29px cap.
+		const verticalEm = 42 / 2048;
+		const commands: OutlineCommand[] = [];
+		for (const char of glyph.text) {
+			const outline = RETICLE_OUTLINES[char];
+			if (!outline) continue;
+			for (const command of outline.commands) {
+				if (command[0] === 'Z') { commands.push(['Z']); continue; }
+				const x = (v: number) => glyph.x + (advance + v * em) * sx;
+				const y = (v: number) => glyph.y + (baseline - v * verticalEm) * sy;
+				commands.push(command[0] === 'Q'
+					? ['Q', x(command[1]), y(command[2]), x(command[3]), y(command[4])]
+					: [command[0], x(command[1]), y(command[2])]);
+			}
+			advance += outline.advance * em;
+		}
+		return commands.length ? [{ commands, weight: sx }] : [];
+	});
+}
+
+/** Whole-pixel, monochrome fallback for rectangle-only clients. SVG/Canvas use smooth outlines. */
 export function reticleLabelRects(glyphs: readonly ReticleGlyph[]): ReticleRect[] {
 	const rects: ReticleRect[] = [];
 	for (const glyph of glyphs) {
-		const text = glyph.text.padStart(3, ' ');
-		for (let i = 0; i < text.length; i++) {
-			const rows = letters[text[i]];
-			if (!rows) continue;
-			for (let row = 0; row < 5; row++) {
-				for (let column = 0; column < 3; column++) {
-					if (rows[row][column] !== '1') continue;
-					const x = glyph.x + Math.floor(((i * 4 + column) * glyph.width) / 11);
-					const y = glyph.y + Math.floor((row * glyph.height) / 5);
-					const right = glyph.x + Math.floor(((i * 4 + column + 1) * glyph.width) / 11);
-					const bottom = glyph.y + Math.floor(((row + 1) * glyph.height) / 5);
-					if (right > x && bottom > y) rects.push({ x, y, width: right - x, height: bottom - y });
+		const edges: number[][] = [];
+		let current = [0, 0], start = current;
+		const line = (next: number[]) => { edges.push([...current, ...next]); current = next; };
+		for (const { commands } of reticleLabelPaths([glyph])) for (const c of commands) {
+			if (c[0] === 'M') { current = [c[1], c[2]]; start = current; }
+			else if (c[0] === 'L') line([c[1], c[2]]);
+			else if (c[0] === 'Z') line(start);
+			else {
+				const from = current;
+				for (let i = 1; i <= 12; i++) {
+					const t = i / 12, u = 1 - t;
+					line([u*u*from[0]+2*u*t*c[1]+t*t*c[3], u*u*from[1]+2*u*t*c[2]+t*t*c[4]]);
 				}
+			}
+		}
+		for (let y = Math.ceil(glyph.y); y < glyph.y + glyph.height; y++) {
+			let run: number | undefined;
+			for (let x = Math.ceil(glyph.x); x <= glyph.x + glyph.width; x++) {
+				let winding = 0;
+				if (x < glyph.x + glyph.width) for (const [x1,y1,x2,y2] of edges) {
+					const side = (x2-x1)*(y+.5-y1)-(x+.5-x1)*(y2-y1);
+					if (y1 <= y+.5 && y2 > y+.5 && side > 0) winding++;
+					if (y1 > y+.5 && y2 <= y+.5 && side < 0) winding--;
+				}
+				if (winding && run === undefined) run = x;
+				if (!winding && run !== undefined) { rects.push({ x: run, y, width: x-run, height: 1 }); run = undefined; }
 			}
 		}
 	}
